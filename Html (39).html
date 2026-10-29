@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบบันทึกข้อมูลการอบรม - โรงเรียนบ้านหนองแมงดา</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Sarabun:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1B365D',
+                        secondary: '#4A777A',
+                        accent: '#D4AF37',
+                        lightbg: '#F4F7F6'
+                    },
+                    fontFamily: {
+                        sans: ['Prompt', 'sans-serif'],
+                        sarabun: ['Sarabun', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* สไตล์ฟอนต์ราชการไทย (TH Sarabun PSK) */
+        .sarabun-font { 
+            font-family: 'TH Sarabun PSK', 'Sarabun', sans-serif; 
+            font-size: 16pt; 
+            line-height: 1.5;
+            color: #000000;
+        }
+        
+        /* จัดกรอบหน้ากระดาษ A4 มาตรฐานราชการ */
+        .a4-page {
+            width: 210mm;
+            min-height: 297mm;
+            max-height: 297mm;
+            padding: 20mm 20mm 15mm 25mm;
+            margin: 0 auto 10mm auto;
+            background: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            page-break-after: always;
+            overflow: hidden;
+        }
+
+        .gov-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+            font-size: 16pt;
+        }
+        .gov-table th, .gov-table td {
+            border: 1px solid #000;
+            padding: 6px 10px;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body class="bg-lightbg text-gray-800 font-sans min-h-screen flex flex-col">
+
+    <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex flex-col items-center justify-center text-white">
+        <i class="fas fa-spinner fa-spin text-5xl text-accent mb-3"></i>
+        <p class="text-lg font-medium" id="loadingText">กำลังประมวลผลข้อมูล...</p>
+    </div>
+
+    <header class="bg-primary text-white shadow-md no-print">
+        <div class="container mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center">
+            <div class="flex items-center space-x-3 mb-3 md:mb-0">
+                <div class="bg-accent text-primary p-3 rounded-full shadow">
+                    <i class="fas fa-graduation-cap text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl md:text-2xl font-bold">โรงเรียนบ้านหนองแมงดา</h1>
+                    <p class="text-xs text-gray-300">ระบบบันทึกข้อมูลการอบรมและการพัฒนาตนเอง</p>
+                </div>
+            </div>
+            <nav class="flex space-x-1 md:space-x-2 bg-primary/80 p-1.5 rounded-lg border border-secondary/40">
+                <button onclick="switchTab('form')" id="nav-form" class="px-4 py-2 rounded-md text-sm font-medium transition bg-accent text-primary shadow">
+                    <i class="fas fa-edit mr-1.5"></i> บันทึกข้อมูล
+                </button>
+                <button onclick="switchTab('list')" id="nav-list" class="px-4 py-2 rounded-md text-sm font-medium transition text-gray-200 hover:bg-white/10">
+                    <i class="fas fa-list-alt mr-1.5"></i> ประวัติรายการ
+                </button>
+                <button onclick="switchTab('dashboard')" id="nav-dashboard" class="px-4 py-2 rounded-md text-sm font-medium transition text-gray-200 hover:bg-white/10">
+                    <i class="fas fa-chart-pie mr-1.5"></i> แดชบอร์ดและรายงาน
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-6 flex-grow">
+        <!-- TAB 1: FORM -->
+        <section id="tab-form" class="space-y-6">
+            <div class="bg-white rounded-xl shadow-md p-6 md:p-8 border-t-4 border-accent">
+                <div class="border-b pb-4 mb-6">
+                    <h2 class="text-xl font-bold text-primary"><i class="fas fa-file-pen mr-2 text-accent"></i>แบบฟอร์มบันทึกผลการพัฒนาตนเอง</h2>
+                    <p class="text-sm text-gray-500">กรอกข้อมูลรายละเอียดการอบรมเพื่อจัดเก็บลง Google Sheets และ Drive อัตโนมัติ</p>
+                </div>
+
+                <form id="trainingForm" onsubmit="handleSubmit(event)" class="space-y-6">
+                    <div>
+                        <h3 class="text-md font-semibold text-primary bg-lightbg p-2.5 rounded border-l-4 border-primary mb-4">
+                            <i class="fas fa-user-tie mr-2"></i>1. ข้อมูลครูผู้รับการอบรม
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อ-นามสกุล <span class="text-red-500">*</span></label>
+                                <input type="text" id="teacherName" required class="w-full rounded-lg border-gray-300 border px-3.5 py-2.5 focus:ring-2 focus:ring-primary focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">ตำแหน่ง <span class="text-red-500">*</span></label>
+                                <select id="position" required class="w-full rounded-lg border-gray-300 border px-3.5 py-2.5 focus:ring-2 focus:ring-primary focus:outline-none bg-white">
+                                    <option value="">-- เลือกตำแหน่ง --</option>
+                                    <option value="ครูผู้ช่วย">ครูผู้ช่วย</option>
+                                    <option value="ครู คศ.1">ครู คศ.1</option>
+                                    <option value="ครู คศ.2">ครู คศ.2</option>
+                                    <option value="ครู คศ.3">ครู คศ.3</option>
+                                    <option value="พนักงานราชการ/จ้างเหมา">พนักงานราชการ/จ้างเหมา</option>
+                                    <option value="ผู้บริหารสถานศึกษา">ผู้บริหารสถานศึกษา</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">กลุ่มสาระการเรียนรู้ <span class="text-red-500">*</span></label>
+                                <select id="department" required class="w-full rounded-lg border-gray-300 border px-3.5 py-2.5 focus:ring-2 focus:ring-primary focus:outline-none bg-white">
+                                    <option value="">-- เลือกกลุ่มสาระ --</option>
+                                    <option value="ภาษาไทย">ภาษาไทย</option>
+                                    <option value="คณิตศาสตร์">คณิตศาสตร์</option>
+                                    <option value="วิทยาศาสตร์และเทคโนโลยี">วิทยาศาสตร์และเทคโนโลยี</option>
+                                    <option value="สังคมศึกษา ศาสนา และวัฒนธรรม">สังคมศึกษา ศาสนา และวัฒนธรรม</option>
+                                    <option value="สุขศึกษาและพลศึกษา">สุขศึกษาและพลศึกษา</option>
+                                    <option value="ศิลปะ">ศิลปะ</option>
+                                    <option value="การงานอาชีพ">การงานอาชีพ</option>
+                                    <option value="ภาษาต่างประเทศ">ภาษาต่างประเทศ</option>
+                                    <option value="ปฐมวัย">ปฐมวัย</option>
+                                    <option value="บริหารงานบุคคล/งานบริหาร">บริหารงานบุคคล/งานบริหาร</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-md font-semibold text-primary bg-lightbg p-2.5 rounded border-l-4 border-primary mb-4">
+                            <i class="fas fa-book-open mr-2"></i>2. ข้อมูลหลักสูตรและการอบรม
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อหลักสูตร / หัวข้อการอบรม <span class="text-red-500">*</span></label>
+                                <input type="text" id="courseName" required class="w-full rounded-lg border-gray-300 border px-3.5 py-2.5 focus:ring-2 focus:ring-primary focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">หน่วยงานที่จัด <span class="text-red-500">*</span></label>
+                                <input type="text" id="organizer" required class="w-full rounded-lg border-gray-300 border px-3.5 py-2.5 focus:ring-2 focus:ring-primary focus:outline-none">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">รูปแบบการอบรม <span class="text-red-500">*</span></label>
+                                <select id="format" required class="w-full rounded-lg border-gray-300 border px-3.5 py-2.5 focus:ring-2 focus:ring-primary focus:outline-none bg-white">
+                                    <option value="ออนไลน์">ออนไลน์</option>
+                                    <option value="ออนไซต์">ออนไซต์ (On-site)</option>
+                                    <option value="ไฮบริด">ไฮบริด (Hybrid)</option>
+                                    <option value="ดูงาน">ศึกษาดูงาน</option>
+                                    <option value="อื่นๆ">อื่นๆ</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">วันที่เริ่มอบรม <span class="text-red-500">*</span></label>
+                                <input type="date" id="startDate" required class="w-full rounded-lg border-gray-300 border px-3.5 py-2.5 focus:ring-2 focus:ring-primary focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">วันที่สิ้นสุดอบรม <span class="text-red-500">*</span></label>
+                                <input type="date" id="endDate" required class="w-full rounded-lg border-gray-300 border px-3.5 py-2.5 focus:ring-2 focus:ring-primary focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">จำนวนชั่วโมง (ชม.) <span class="text-red-500">*</span></label>
+                                <input type="number" step="0.5" min="0.5" id="hours" required class="w-full rounded-lg border-gray-300 border px-3.5 py-2.5 focus:ring-2 focus:ring-primary focus:outline-none">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">ประเภทการพัฒนา <span class="text-red-500">*</span></label>
+                            <select id="devType" required class="w-full rounded-lg border-gray-300 border px-3.5 py-2.5 focus:ring-2 focus:ring-primary focus:outline-none bg-white">
+                                <option value="">-- เลือกประเภทการพัฒนา --</option>
+                                <option value="การจัดการเรียนรู้ / Active Learning">การจัดการเรียนรู้ / Active Learning</option>
+                                <option value="สมรรถนะวิชาชีพครู">สมรรถนะวิชาชีพครู</option>
+                                <option value="เทคโนโลยีและดิจิทัลแพลตฟอร์ม">เทคโนโลยีและดิจิทัลแพลตฟอร์ม</option>
+                                <option value="คุณธรรม จริยธรรม และจรรยาบรรณวิชาชีพ">คุณธรรม จริยธรรม และจรรยาบรรณวิชาชีพ</option>
+                                <option value="การวัดและประเมินผล">การวัดและประเมินผล</option>
+                                <option value="อื่นๆ">อื่นๆ</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-md font-semibold text-primary bg-lightbg p-2.5 rounded border-l-4 border-primary mb-4">
+                            <i class="fas fa-clipboard-check mr-2"></i>3. สรุปผลและการนำไปใช้ประโยชน์
+                        </h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">สรุปเนื้อหา / องค์ความรู้ที่ได้รับ <span class="text-red-500">*</span></label>
+                                <textarea id="summary" rows="3" required class="w-full rounded-lg border-gray-300 border px-3.5 py-2.5 focus:ring-2 focus:ring-primary focus:outline-none"></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">การนำผลไปใช้ประโยชน์ / ขยายผล <span class="text-red-500">*</span></label>
+                                <textarea id="implementation" rows="3" required class="w-full rounded-lg border-gray-300 border px-3.5 py-2.5 focus:ring-2 focus:ring-primary focus:outline-none"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-md font-semibold text-primary bg-lightbg p-2.5 rounded border-l-4 border-primary mb-4">
+                            <i class="fas fa-paperclip mr-2"></i>4. แนบไฟล์หลักฐานและภาพประกอบ
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="border p-4 rounded-lg bg-gray-50">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">ภาพบรรยากาศการอบรม (2-6 ภาพ)</label>
+                                <input type="file" id="activityImages" accept="image/*" multiple class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white">
+                            </div>
+                            <div class="border p-4 rounded-lg bg-gray-50">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">ภาพเกียรติบัตร (1 ภาพ)</label>
+                                <input type="file" id="certImage" accept="image/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-accent file:text-primary">
+                            </div>
+                            <div class="border p-4 rounded-lg bg-gray-50">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">เอกสารแนบเพิ่มเติม (PDF สูงสุด 3 ไฟล์)</label>
+                                <input type="file" id="otherFiles" multiple class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-secondary file:text-white">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end space-x-3 pt-4 border-t">
+                        <button type="reset" class="px-6 py-2.5 rounded-lg border border-gray-300 text-gray-600 font-medium">ล้างข้อมูล</button>
+                        <button type="submit" class="px-8 py-2.5 rounded-lg bg-primary text-white font-medium shadow-lg hover:bg-primary/90">บันทึกข้อมูลส่งเข้าระบบ</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- TAB 2: LIST -->
+        <section id="tab-list" class="space-y-6 hidden">
+            <div class="bg-white rounded-xl shadow-md p-6 border-t-4 border-primary">
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <h2 class="text-xl font-bold text-primary"><i class="fas fa-list-check mr-2 text-accent"></i>ประวัติรายการบันทึกการอบรม</h2>
+                    <div class="flex gap-2 w-full md:w-auto">
+                        <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="ค้นหาชื่อครู, หลักสูตร..." class="px-4 py-2 border rounded-lg text-sm w-full md:w-64">
+                        <button onclick="fetchData()" class="px-4 py-2 bg-secondary text-white rounded-lg text-sm"><i class="fas fa-sync-alt"></i></button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-primary text-white text-sm">
+                                <th class="p-3">วันที่บันทึก</th>
+                                <th class="p-3">ชื่อ-นามสกุล</th>
+                                <th class="p-3">หลักสูตร / หน่วยงาน</th>
+                                <th class="p-3 text-center">รูปแบบ</th>
+                                <th class="p-3 text-center">ชม.</th>
+                                <th class="p-3 text-center">จัดการ / ดาวน์โหลด PDF</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataTableBody" class="divide-y divide-gray-200 text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: DASHBOARD & REPORT -->
+        <section id="tab-dashboard" class="space-y-6 hidden">
+            <div class="bg-white rounded-xl shadow-md p-4 flex flex-wrap gap-4 items-center justify-between border-t-4 border-accent no-print">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-filter text-primary"></i>
+                    <span class="font-semibold text-sm">ตัวกรองข้อมูลสรุปภาพรวม:</span>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                    <select id="filterTeacher" onchange="updateDashboard()" class="border rounded-lg px-3 py-1.5 text-sm bg-white">
+                        <option value="">-- ภาพรวมทั้งโรงเรียน --</option>
+                    </select>
+                    <select id="filterPeriod" onchange="updateDashboard()" class="border rounded-lg px-3 py-1.5 text-sm bg-white">
+                        <option value="all">ทุกช่วงเวลา / ทั้งปี</option>
+                        <option value="term1">ภาคเรียนที่ 1 (พ.ค. - ต.ค.)</option>
+                        <option value="term2">ภาคเรียนที่ 2 (พ.ย. - เม.ย.)</option>
+                    </select>
+                    <button onclick="exportSummaryPDF()" class="px-4 py-1.5 bg-blue-700 text-white rounded-lg text-sm hover:bg-blue-800 transition flex items-center shadow">
+                        <i class="fas fa-file-pdf mr-1.5"></i> ดาวน์โหลดรายงานสรุป PDF (ภาพรวม)
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 no-print">
+                <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-primary flex items-center justify-between">
+                    <div>
+                        <p class="text-xs text-gray-500 uppercase font-semibold">หลักสูตรทั้งหมด</p>
+                        <h3 class="text-3xl font-bold text-primary mt-1" id="kpiCourses">0</h3>
+                    </div>
+                    <i class="fas fa-book text-3xl text-primary/20"></i>
+                </div>
+                <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-accent flex items-center justify-between">
+                    <div>
+                        <p class="text-xs text-gray-500 uppercase font-semibold">ชั่วโมงพัฒนารวม</p>
+                        <h3 class="text-3xl font-bold text-accent mt-1" id="kpiHours">0</h3>
+                    </div>
+                    <i class="fas fa-clock text-3xl text-accent/20"></i>
+                </div>
+                <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-secondary flex items-center justify-between">
+                    <div>
+                        <p class="text-xs text-gray-500 uppercase font-semibold">ครูผู้เข้าร่วม</p>
+                        <h3 class="text-3xl font-bold text-secondary mt-1" id="kpiTeachers">0</h3>
+                    </div>
+                    <i class="fas fa-users text-3xl text-secondary/20"></i>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 no-print">
+                <div class="bg-white rounded-xl shadow-md p-6"><canvas id="chartHoursByMonth"></canvas></div>
+                <div class="bg-white rounded-xl shadow-md p-6"><canvas id="chartFormat"></canvas></div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal Detail & Download PDF -->
+    <div id="detailModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-2 md:p-6">
+        <div class="bg-gray-100 rounded-2xl max-w-5xl w-full h-full max-h-[95vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="bg-primary text-white px-6 py-4 flex justify-between items-center shrink-0">
+                <h3 class="font-bold">รายละเอียดและดาวน์โหลดรายงาน PDF (มาตรฐานราชการ - ไม่เกิน 3 หน้า)</h3>
+                <button onclick="closeModal()" class="text-white text-xl font-bold">&times;</button>
+            </div>
+            
+            <div class="overflow-y-auto flex-grow p-4 space-y-4 bg-gray-200" id="reportContainer">
+                <div id="singleReportPreview"></div>
+            </div>
+            
+            <div class="bg-gray-200 px-6 py-4 flex justify-end space-x-3 border-t shrink-0">
+                <button onclick="downloadPDF()" class="px-6 py-2.5 bg-blue-700 text-white rounded-lg text-sm hover:bg-blue-800 transition shadow font-bold">
+                    <i class="fas fa-file-pdf mr-1"></i> ดาวน์โหลดไฟล์ PDF
+                </button>
+                <button onclick="closeModal()" class="px-4 py-2.5 bg-gray-500 text-white rounded-lg text-sm">ปิด</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Container สำหรับพิมพ์รายงานสรุปภาพรวมเป็น PDF -->
+    <div id="summaryReportHidden" style="display: none;"></div>
+
+    <script>
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbxEhuYYJRNvL-qmRtN2MriPBlwZzaYJ0X2nSZeE-3_T5MJcWN3WWerNvmaz5mL2sSbx6w/exec";
+
+        let allTrainingData = [];
+        let chartMonthInstance = null, chartFormatInstance = null;
+        let currentItemName = "report";
+        let filteredDashboardData = [];
+
+        function switchTab(tabId) {
+            ['form', 'list', 'dashboard'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.add('hidden');
+                document.getElementById(`nav-${t}`).classList.remove('bg-accent', 'text-primary', 'shadow');
+                document.getElementById(`nav-${t}`).classList.add('text-gray-200');
+            });
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            document.getElementById(`nav-${tabId}`).classList.add('bg-accent', 'text-primary', 'shadow');
+            if (tabId === 'list' || tabId === 'dashboard') fetchData();
+        }
+
+        function showLoading(show, text = "กำลังประมวลผล...") {
+            const overlay = document.getElementById('loadingOverlay');
+            document.getElementById('loadingText').innerText = text;
+            if (show) overlay.classList.remove('hidden'); else overlay.classList.add('hidden');
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve({ name: file.name, base64: reader.result });
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        async function handleSubmit(event) {
+            event.preventDefault();
+            showLoading(true, "กำลังอัปโหลดไฟล์และบันทึกข้อมูล...");
+
+            try {
+                const data = {
+                    teacherName: document.getElementById('teacherName').value,
+                    position: document.getElementById('position').value,
+                    department: document.getElementById('department').value,
+                    courseName: document.getElementById('courseName').value,
+                    organizer: document.getElementById('organizer').value,
+                    format: document.getElementById('format').value,
+                    startDate: document.getElementById('startDate').value,
+                    endDate: document.getElementById('endDate').value,
+                    hours: document.getElementById('hours').value,
+                    devType: document.getElementById('devType').value,
+                    summary: document.getElementById('summary').value,
+                    implementation: document.getElementById('implementation').value,
+                    activityImages: [],
+                    certificateImage: null,
+                    otherFiles: []
+                };
+
+                for (let file of document.getElementById('activityImages').files) {
+                    data.activityImages.push(await fileToBase64(file));
+                }
+                const cert = document.getElementById('certImage').files[0];
+                if (cert) data.certificateImage = await fileToBase64(cert);
+                for (let file of document.getElementById('otherFiles').files) {
+                    data.otherFiles.push(await fileToBase64(file));
+                }
+
+                const response = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(data) });
+                const result = await response.json();
+
+                showLoading(false);
+                if (result.status === 'success') {
+                    alert('บันทึกข้อมูลสำเร็จเรียบร้อยแล้ว');
+                    document.getElementById('trainingForm').reset();
+                    switchTab('list');
+                } else {
+                    alert('เกิดข้อผิดพลาด: ' + result.message);
+                }
+            } catch (err) {
+                showLoading(false);
+                alert('เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ');
+                console.error(err);
+            }
+        }
+
+        async function fetchData() {
+            showLoading(true, "กำลังดึงข้อมูล...");
+            try {
+                const response = await fetch(`${GAS_URL}?action=getData`);
+                const result = await response.json();
+                showLoading(false);
+                if (result.status === 'success') {
+                    allTrainingData = result.data;
+                    renderTable(allTrainingData);
+                    populateTeacherFilter();
+                    updateDashboard();
+                }
+            } catch (e) {
+                showLoading(false);
+                console.error(e);
+            }
+        }
+
+        function renderTable(data) {
+            const tbody = document.getElementById('dataTableBody');
+            tbody.innerHTML = data.length === 0 ? `<tr><td colspan="6" class="text-center py-4 text-gray-400">ไม่พบข้อมูล</td></tr>` : '';
+            data.forEach((item, index) => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="p-3 text-xs text-gray-500">${item.timestamp ? new Date(item.timestamp).toLocaleDateString('th-TH') : '-'}</td>
+                        <td class="p-3 font-medium text-primary">${item.teacherName || '-'}<br><span class="text-xs text-gray-400">${item.position || ''}</span></td>
+                        <td class="p-3">${item.courseName || '-'}<br><span class="text-xs text-gray-500">${item.organizer || ''}</span></td>
+                        <td class="p-3 text-center"><span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">${item.format || '-'}</span></td>
+                        <td class="p-3 text-center font-bold text-accent">${item.hours || 0} ชม.</td>
+                        <td class="p-3 text-center">
+                            <button onclick="viewDetail(${index})" class="px-3 py-1.5 bg-blue-700 text-white rounded text-xs hover:bg-blue-800 transition">
+                                <i class="fas fa-file-pdf mr-1"></i> ดาวน์โหลด PDF
+                            </button>
+                        </td>
+                    </tr>`;
+            });
+        }
+
+        function filterTable() {
+            const keyword = document.getElementById('searchInput').value.toLowerCase();
+            renderTable(allTrainingData.filter(i => (i.teacherName || '').toLowerCase().includes(keyword) || (i.courseName || '').toLowerCase().includes(keyword)));
+        }
+
+        function getDriveDirectUrl(url) {
+            if (!url) return '';
+            let fileId = '';
+            if (url.includes('id=')) {
+                fileId = url.split('id=')[1].split('&')[0];
+            } else if (url.includes('/d/')) {
+                fileId = url.split('/d/')[1].split('/')[0];
+            }
+            if (fileId) {
+                return `https://lh3.googleusercontent.com/d/${fileId}`;
+            }
+            return url;
+        }
+
+        function viewDetail(index) {
+            const item = allTrainingData[index];
+            currentItemName = `${item.teacherName}_${item.courseName}`;
+            let imagesArray = item.activityImages || [];
+
+            let imagesHtml = '';
+            if (imagesArray.length > 0) {
+                let rows = '';
+                for (let i = 0; i < imagesArray.length; i += 2) {
+                    let img1 = imagesArray[i] ? `<img src="${getDriveDirectUrl(imagesArray[i])}" style="width:220px; height:140px; object-fit:cover; border:1px solid #666; padding:2px;" crossorigin="anonymous"/><br/><span style="font-size:13pt;">ภาพที่ ${i+1}</span>` : '';
+                    let img2 = imagesArray[i+1] ? `<img src="${getDriveDirectUrl(imagesArray[i+1])}" style="width:220px; height:140px; object-fit:cover; border:1px solid #666; padding:2px;" crossorigin="anonymous"/><br/><span style="font-size:13pt;">ภาพที่ ${i+2}</span>` : '';
+                    rows += `
+                        <tr>
+                            <td style="text-align: center; padding: 8px; width: 50%; border: none;">${img1}</td>
+                            <td style="text-align: center; padding: 8px; width: 50%; border: none;">${img2}</td>
+                        </tr>
+                    `;
+                }
+                imagesHtml = `<table style="width: 100%; border-collapse: collapse; margin-top: 5px; border: none;">${rows}</table>`;
+            } else {
+                imagesHtml = '<p style="color: #777; text-align: center; font-size: 14pt;">ไม่มีรูปภาพกิจกรรม</p>';
+            }
+
+            let certHtml = item.certificateImage && item.certificateImage.trim() !== '' 
+                ? `<div style="text-align: center; margin-top: 5px;"><img src="${getDriveDirectUrl(item.certificateImage)}" style="max-width: 400px; max-height: 260px; object-fit: contain; border: 1px solid #666; padding: 2px;" crossorigin="anonymous"/></div>` 
+                : '<p style="color: #777; text-align: center; font-size: 14pt;">ไม่มีเกียรติบัตรแนบ</p>';
+
+            document.getElementById('singleReportPreview').innerHTML = `
+                <!-- ================= หน้าที่ 1 ================= -->
+                <div class="a4-page sarabun-font text-black">
+                    <div>
+                        <div style="text-align: center; margin-bottom: 12px;">
+                            <h2 style="font-size: 19pt; font-weight: bold; margin: 0;">รายงานผลการปฏิบัติงานและการพัฒนาตนเอง</h2>
+                            <p style="font-size: 15pt; margin: 2px 0 0 0;">โรงเรียนบ้านหนองแมงดา สำนักงานเขตพื้นที่การศึกษาประถมศึกษา</p>
+                        </div>
+
+                        <table class="gov-table">
+                            <tr>
+                                <td style="width: 50%;"><strong>ชื่อ-นามสกุล:</strong> ${item.teacherName || '-'}</td>
+                                <td style="width: 50%;"><strong>ตำแหน่ง:</strong> ${item.position || '-'}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>กลุ่มสาระการเรียนรู้:</strong> ${item.department || '-'}</td>
+                                <td><strong>วันที่บันทึก:</strong> ${item.timestamp ? new Date(item.timestamp).toLocaleDateString('th-TH') : '-'}</td>
+                            </tr>
+                        </table>
+
+                        <div style="margin-bottom: 8px; font-size: 15pt;">
+                            <p style="margin: 2px 0;"><strong>ชื่อหลักสูตร / โครงการ:</strong> ${item.courseName || '-'}</p>
+                            <p style="margin: 2px 0;"><strong>หน่วยงานผู้จัด:</strong> ${item.organizer || '-'}</p>
+                            <p style="margin: 2px 0;"><strong>รูปแบบการพัฒนา:</strong> ${item.format || '-'} &nbsp;|&nbsp; <strong>ประเภท:</strong> ${item.devType || '-'}</p>
+                            <p style="margin: 2px 0;"><strong>ระยะเวลา:</strong> ${item.startDate || '-'} ถึง ${item.endDate || '-'} (รวม ${item.hours || 0} ชม.)</p>
+                        </div>
+
+                        <div style="margin-bottom: 6px;">
+                            <h3 style="font-size: 16pt; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 1px; margin-bottom: 2px;">1. สรุปเนื้อหา / องค์ความรู้ที่ได้รับ</h3>
+                            <div style="background-color: #fafafa; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; white-space: pre-line; font-size: 14pt; max-height: 120px; overflow: hidden;">${item.summary || '-'}</div>
+                        </div>
+
+                        <div>
+                            <h3 style="font-size: 16pt; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 1px; margin-bottom: 2px;">2. การนำผลไปใช้ประโยชน์ / ขยายผล</h3>
+                            <div style="background-color: #fafafa; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; white-space: pre-line; font-size: 14pt; max-height: 120px; overflow: hidden;">${item.implementation || '-'}</div>
+                        </div>
+                    </div>
+                    <div style="text-align: right; font-size: 13pt; color: #666; border-top: 1px solid #ccc; padding-top: 3px;">หน้า 1 / 3</div>
+                </div>
+
+                <!-- ================= หน้าที่ 2 ================= -->
+                <div class="a4-page sarabun-font text-black">
+                    <div>
+                        <div style="text-align: center; margin-bottom: 10px;">
+                            <h3 style="font-size: 17pt; font-weight: bold; margin: 0;">3. ภาพบรรยากาศการเข้าร่วมกิจกรรม</h3>
+                            <p style="font-size: 14pt; color: #555; margin: 2px 0 0 0;">หลักสูตร: ${item.courseName || '-'}</p>
+                        </div>
+                        <div>
+                            ${imagesHtml}
+                        </div>
+                    </div>
+                    <div style="text-align: right; font-size: 13pt; color: #666; border-top: 1px solid #ccc; padding-top: 3px;">หน้า 2 / 3</div>
+                </div>
+
+                <!-- ================= หน้าที่ 3 ================= -->
+                <div class="a4-page sarabun-font text-black">
+                    <div>
+                        <div style="text-align: center; margin-bottom: 10px;">
+                            <h3 style="font-size: 17pt; font-weight: bold; margin: 0;">4. เกียรติบัตร / เอกสารรับรอง</h3>
+                            <p style="font-size: 14pt; color: #555; margin: 2px 0 0 0;">หลักสูตร: ${item.courseName || '-'}</p>
+                        </div>
+                        <div>
+                            ${certHtml}
+                        </div>
+                    </div>
+
+                    <div>
+                        <table style="width: 100%; margin-top: 15px; font-size: 15pt; border-collapse: collapse;">
+                            <tr>
+                                <td style="text-align: center; width: 50%; vertical-align: top; border: none;">
+                                    (ลงชื่อ).......................................................ผู้รายงาน<br/>
+                                    (${item.teacherName || '.......................................................'})<br/>
+                                    ตำแหน่ง ${item.position || 'ครู'}
+                                </td>
+                                <td style="text-align: center; width: 50%; vertical-align: top; border: none;">
+                                    (ลงชื่อ).......................................................ผู้รับรองข้อมูล<br/>
+                                    (นางอิงกมล บุญลือ)<br/>
+                                    ผู้อำนวยการโรงเรียนบ้านหนองแมงดา
+                                </td>
+                            </tr>
+                        </table>
+                        <div style="text-align: right; font-size: 13pt; color: #666; border-top: 1px solid #ccc; padding-top: 3px; margin-top: 10px;">หน้า 3 / 3</div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('detailModal').classList.remove('hidden');
+        }
+
+        function downloadPDF() {
+            const element = document.getElementById('singleReportPreview');
+            showLoading(true, "กำลังสร้างไฟล์ PDF...");
+            
+            const opt = {
+                margin:       0,
+                filename:     `รายงานอบรม_${currentItemName}.pdf`,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            html2pdf().from(element).set(opt).save().then(() => {
+                showLoading(false);
+            }).catch(err => {
+                showLoading(false);
+                alert("เกิดข้อผิดพลาดในการดาวน์โหลด PDF: " + err);
+            });
+        }
+
+        function closeModal() { document.getElementById('detailModal').classList.add('hidden'); }
+
+        function populateTeacherFilter() {
+            const select = document.getElementById('filterTeacher');
+            const teachers = [...new Set(allTrainingData.map(item => item.teacherName))];
+            select.innerHTML = '<option value="">-- ภาพรวมทั้งโรงเรียน --</option>';
+            teachers.forEach(t => {
+                if(t) select.innerHTML += `<option value="${t}">${t}</option>`;
+            });
+        }
+
+        function updateDashboard() {
+            const teacherFilter = document.getElementById('filterTeacher').value;
+            const periodFilter = document.getElementById('filterPeriod').value;
+
+            let filtered = allTrainingData;
+            if (teacherFilter) filtered = filtered.filter(item => item.teacherName === teacherFilter);
+            if (periodFilter !== 'all') {
+                filtered = filtered.filter(item => {
+                    if (!item.startDate) return false;
+                    const month = new Date(item.startDate).getMonth() + 1;
+                    if (periodFilter === 'term1') return month >= 5 && month <= 10;
+                    if (periodFilter === 'term2') return (month >= 11 || month <= 4);
+                    return true;
+                });
+            }
+
+            filteredDashboardData = filtered;
+
+            document.getElementById('kpiCourses').innerText = filtered.length;
+            document.getElementById('kpiHours').innerText = filtered.reduce((s, i) => s + parseFloat(i.hours || 0), 0).toLocaleString();
+            document.getElementById('kpiTeachers').innerText = new Set(filtered.map(i => i.teacherName)).size;
+
+            renderCharts(filtered);
+        }
+
+        function renderCharts(data) {
+            const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+            const monthHours = new Array(12).fill(0);
+            data.forEach(item => {
+                if (item.startDate) {
+                    const m = new Date(item.startDate).getMonth();
+                    monthHours[m] += parseFloat(item.hours || 0);
+                }
+            });
+
+            if (chartMonthInstance) chartMonthInstance.destroy();
+            chartMonthInstance = new Chart(document.getElementById('chartHoursByMonth'), {
+                type: 'bar',
+                data: {
+                    labels: months,
+                    datasets: [{ label: 'ชั่วโมงอบรมรวม', data: monthHours, backgroundColor: '#1B365D', borderRadius: 6 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            const formatCounts = {};
+            data.forEach(item => {
+                const fmt = item.format || 'อื่นๆ';
+                formatCounts[fmt] = (formatCounts[fmt] || 0) + 1;
+            });
+
+            if (chartFormatInstance) chartFormatInstance.destroy();
+            chartFormatInstance = new Chart(document.getElementById('chartFormat'), {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(formatCounts),
+                    datasets: [{ data: Object.values(formatCounts), backgroundColor: ['#1B365D', '#4A777A', '#D4AF37', '#6B7280', '#3B82F6'] }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        function exportSummaryPDF() {
+            const dataToExport = filteredDashboardData.length > 0 ? filteredDashboardData : allTrainingData;
+            const teacherFilter = document.getElementById('filterTeacher').value;
+
+            let rowsHtml = '';
+            let totalHours = 0;
+            dataToExport.forEach((item, idx) => {
+                totalHours += parseFloat(item.hours || 0);
+                rowsHtml += `
+                    <tr>
+                        <td style="border: 1px solid #000; text-align: center; padding: 5px;">${idx + 1}</td>
+                        <td style="border: 1px solid #000; padding: 5px;">${item.teacherName || '-'}<br/><span style="font-size: 13pt; color: #555;">${item.position || '-'}</span></td>
+                        <td style="border: 1px solid #000; padding: 5px;">${item.courseName || '-'}<br/><span style="font-size: 13pt; color: #555;">จัดโดย: ${item.organizer || '-'}</span></td>
+                        <td style="border: 1px solid #000; text-align: center; padding: 5px;">${item.format || '-'}</td>
+                        <td style="border: 1px solid #000; text-align: center; padding: 5px;">${item.hours || 0}</td>
+                    </tr>`;
+            });
+
+            const summaryHtml = `
+                <div class="a4-page sarabun-font text-black" style="padding: 20mm;">
+                    <div>
+                        <div style="text-align: center; margin-bottom: 15px;">
+                            <h2 style="font-size: 20pt; font-weight: bold; margin: 0;">รายงานสรุปผลการพัฒนาตนเองและวิชาชีพ (ภาพรวม)</h2>
+                            <p style="font-size: 16pt; margin: 3px 0 0 0;">โรงเรียนบ้านหนองแมงดา สำนักงานเขตพื้นที่การศึกษาประถมศึกษา</p>
+                        </div>
+                        <p style="font-size: 16pt; margin-bottom: 10px;"><strong>เงื่อนไขการแสดงผล:</strong> ${teacherFilter ? 'คุณครู ' + teacherFilter : 'ภาพรวมข้าราชการครูและบุคลากรทางการศึกษาทั้งโรงเรียน'}</p>
+                        
+                        <table class="gov-table" style="font-size: 15pt;">
+                            <thead>
+                                <tr style="background-color: #f2f2f2; text-align: center;">
+                                    <th style="width: 10%;">ที่</th>
+                                    <th style="width: 25%;">ชื่อ - นามสกุล</th>
+                                    <th style="width: 40%;">ชื่อหลักสูตร / หน่วยงาน</th>
+                                    <th style="width: 15%;">รูปแบบ</th>
+                                    <th style="width: 10%;">ชม.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rowsHtml}
+                            </tbody>
+                        </table>
+                        <p style="font-size: 16pt; text-align: right; margin-top: 10px;"><strong>รวมชั่วโมงพัฒนารวมทั้งสิ้น:</strong> ${totalHours.toLocaleString()} ชั่วโมง</p>
+                    </div>
+
+                    <div>
+                        <table style="width: 100%; margin-top: 30px; font-size: 16pt; border-collapse: collapse;">
+                            <tr>
+                                <td style="text-align: center; width: 50%; vertical-align: top; border: none;">
+                                    (ลงชื่อ).......................................................ผู้รายงาน<br/>
+                                    (${teacherFilter || 'คณะครูโรงเรียนบ้านหนองแมงดา'})<br/>
+                                    ตำแหน่ง ครู
+                                </td>
+                                <td style="text-align: center; width: 50%; vertical-align: top; border: none;">
+                                    (ลงชื่อ).......................................................ผู้รับรองข้อมูล<br/>
+                                    (นางอิงกมล บุญลือ)<br/>
+                                    ผู้อำนวยการโรงเรียนบ้านหนองแมงดา
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            `;
+
+            const container = document.getElementById('summaryReportHidden');
+            container.innerHTML = summaryHtml;
+            container.style.display = 'block';
+
+            showLoading(true, "กำลังสร้างรายงานสรุป PDF...");
+            const opt = {
+                margin:       0,
+                filename:     `รายงานสรุปภาพรวมการอบรม_โรงเรียนบ้านหนองแมงดา.pdf`,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            html2pdf().from(container).set(opt).save().then(() => {
+                showLoading(false);
+                container.style.display = 'none';
+            }).catch(err => {
+                showLoading(false);
+                container.style.display = 'none';
+                alert("เกิดข้อผิดพลาดในการสร้าง PDF: " + err);
+            });
+        }
+    </script>
+</body>
+</html>
